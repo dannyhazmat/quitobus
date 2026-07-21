@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo Conductor - Control de Transporte</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- HTML5-QRCode Scanner -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col justify-center items-center p-4">
+
+    <!-- Tarjeta Principal -->
+    <div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 text-center">
+        
+        <h1 class="text-2xl font-bold mb-2 text-blue-400">🚌 Control de Conductor</h1>
+        <p class="text-sm text-gray-400 mb-6">Escanee su credencial QR institucional para iniciar</p>
+
+        <!-- Lector QR / Vista de Cámara -->
+        <div id="pantalla-login" class="space-y-4">
+            <div id="reader" class="overflow-hidden rounded-lg bg-black border-2 border-blue-500"></div>
+            
+            <!-- Botón de Simulación Rápidas para Pruebas -->
+            <button onclick="simularQR('QR-COND-001')" class="w-full bg-gray-700 hover:bg-gray-600 text-xs py-2 rounded border border-gray-600 transition">
+                ⚡ Simular escaneo de QR-COND-001
+            </button>
+        </div>
+
+        <!-- Vista del Conductor (Oculta al inicio) -->
+        <div id="pantalla-conductor" class="hidden space-y-6">
+            <div class="bg-gray-700 p-4 rounded-xl text-left border border-gray-600">
+                <p class="text-xs text-gray-400 uppercase font-bold">Conductor Validado</p>
+                <h2 id="nombre-conductor" class="text-xl font-bold text-green-400">---</h2>
+                <p class="text-sm text-gray-300">Unidad: <span id="unidad-asignada" class="font-semibold text-white">Bus 15</span></p>
+                <p class="text-sm text-gray-300">Ruta: <span id="ruta-asignada" class="font-semibold text-white">Ruta 01 - Centro / Norte</span></p>
+            </div>
+
+            <div id="estado-servicio" class="py-3 px-4 bg-yellow-900/50 text-yellow-300 rounded-lg border border-yellow-700 font-semibold text-sm">
+                ⚪ JORNADA NO INICIADA
+            </div>
+
+            <!-- Botones Gigantes (Regla de 1 o 2 toques) -->
+            <button id="btn-jornada" onclick="alternarJornada()" class="w-full bg-green-600 hover:bg-green-500 text-white font-extrabold text-lg py-5 rounded-xl shadow-lg transition transform active:scale-95">
+                ▶️ INICIAR JORNADA
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- REEMPLAZA ESTOS DOS VALORES CON TUS CLAVES DE SUPABASE ---
+        const SUPABASE_URL = "https://xfxgerumiruduebubzjt.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_VUZ-Wu9FFzlKHIIdOYaDSw_j4HHwFq2";
+        
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let html5QrcodeScanner;
+        let estaEnJornada = false;
+
+        // Inicializar el Lector de Cámara
+        function iniciarEscaner() {
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+            html5QrcodeScanner.render(onScanSuccess);
+        }
+
+        // Cuando se detecta un QR
+        async function onScanSuccess(decodedText) {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear();
+            }
+            validarConductor(decodedText);
+        }
+
+        // Simulación por botón
+        function simularQR(codigo) {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear();
+            }
+            validarConductor(codigo);
+        }
+
+        // Consultar a Supabase la existencia del Conductor
+        async function validarConductor(codigoQR) {
+            const { data, error } = await _supabase
+                .from('conductores')
+                .select('*')
+                .eq('codigo_qr', codigoQR)
+                .single();
+
+            if (error || !data) {
+                alert("❌ Código QR no válido o conductor no registrado");
+                location.reload();
+                return;
+            }
+
+            // Inyectar datos en la pantalla
+            document.getElementById('nombre-conductor').innerText = data.nombre;
+            document.getElementById('pantalla-login').classList.add('hidden');
+            document.getElementById('pantalla-conductor').classList.remove('hidden');
+        }
+
+        // Alternar el estado de jornada
+        function alternarJornada() {
+            const btn = document.getElementById('btn-jornada');
+            const estado = document.getElementById('estado-servicio');
+
+            if (!estaEnJornada) {
+                estaEnJornada = true;
+                btn.innerText = "⏹️ FINALIZAR JORNADA";
+                btn.className = "w-full bg-red-600 hover:bg-red-500 text-white font-extrabold text-lg py-5 rounded-xl shadow-lg transition transform active:scale-95";
+                estado.innerText = "🟢 EN SERVICIO - TRANSMITIENDO GPS";
+                estado.className = "py-3 px-4 bg-green-900/50 text-green-300 rounded-lg border border-green-700 font-semibold text-sm";
+            } else {
+                estaEnJornada = false;
+                btn.innerText = "▶️ INICIAR JORNADA";
+                btn.className = "w-full bg-green-600 hover:bg-green-500 text-white font-extrabold text-lg py-5 rounded-xl shadow-lg transition transform active:scale-95";
+                estado.innerText = "⚪ JORNADA FINALIZADA";
+                estado.className = "py-3 px-4 bg-yellow-900/50 text-yellow-300 rounded-lg border border-yellow-700 font-semibold text-sm";
+            }
+        }
+
+        window.onload = iniciarEscaner;
+    </script>
+</body>
+</html>
